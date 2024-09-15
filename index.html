@@ -1,0 +1,214 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Wedding Guest Finder</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <style>
+        :root {
+            --primary-color: #007AFF;
+            --background-color: #F2F2F7;
+            --card-background: #FFFFFF;
+            --text-color: #1C1C1E;
+            --secondary-text-color: #8E8E93;
+            --highlight-color: #34C759;
+        }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Helvetica Neue', sans-serif;
+            line-height: 1.6;
+            color: var(--text-color);
+            background-color: var(--background-color);
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        h1 {
+            text-align: center;
+            color: var(--text-color);
+            font-weight: 300;
+            font-size: 2.5em;
+            margin-bottom: 30px;
+        }
+        #searchInput {
+            width: 100%;
+            padding: 15px;
+            margin: 20px 0;
+            border: none;
+            border-radius: 10px;
+            font-size: 1em;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+            transition: box-shadow 0.3s ease;
+        }
+        #searchInput:focus {
+            outline: none;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.1);
+        }
+        .guest-box {
+            background-color: var(--card-background);
+            border-radius: 10px;
+            padding: 20px;
+            margin-bottom: 20px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            transition: transform 0.3s ease, box-shadow 0.3s ease;
+        }
+        .guest-box:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 4px 15px rgba(0,0,0,0.15);
+        }
+        .guest-box h2 {
+            margin-top: 0;
+            color: var(--primary-color);
+            font-weight: 500;
+        }
+        .guest-box p {
+            margin: 10px 0;
+            font-size: 0.9em;
+        }
+        .key-info {
+            font-weight: 500;
+            color: var(--primary-color);
+        }
+        .secondary-info {
+            color: var(--secondary-text-color);
+        }
+        .highlight-info {
+            color: var(--highlight-color);
+            font-weight: 500;
+        }
+        .info-group {
+            margin-bottom: 15px;
+            border-bottom: 1px solid #eee;
+            padding-bottom: 15px;
+        }
+        .info-group:last-child {
+            border-bottom: none;
+        }
+        #loadingMessage {
+            text-align: center;
+            font-size: 1.2em;
+            color: var(--secondary-text-color);
+        }
+    </style>
+</head>
+<body>
+    <h1>Wedding Guest Finder</h1>
+    <div id="loadingMessage">Loading guest list...</div>
+    <input type="text" id="searchInput" placeholder="Search guests by name..." style="display: none;">
+    <div id="guestResults"></div>
+
+    <script>
+        let guests = [];
+
+        async function fetchAndProcessExcel() {
+            try {
+                const response = await fetch('weddingrsvp.xlsx');
+                const arrayBuffer = await response.arrayBuffer();
+                const data = new Uint8Array(arrayBuffer);
+                const workbook = XLSX.read(data, {type: 'array', cellDates: true});
+                const sheetName = workbook.SheetNames[0];
+                const worksheet = workbook.Sheets[sheetName];
+                guests = XLSX.utils.sheet_to_json(worksheet, {raw: false, dateNF: 'yyyy-mm-dd'});
+                
+                document.getElementById('loadingMessage').style.display = 'none';
+                document.getElementById('searchInput').style.display = 'block';
+            } catch (error) {
+                console.error('Error fetching or processing Excel file:', error);
+                document.getElementById('loadingMessage').textContent = 'Error loading guest list. Please try again later.';
+            }
+        }
+
+        function formatDate(dateString) {
+            if (!dateString) return '';
+            const date = new Date(dateString);
+            return date.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
+        }
+
+        function formatTime(timeString) {
+            if (!timeString) return '';
+            const [hours, minutes] = timeString.split(':');
+            return `${hours.padStart(2, '0')}:${minutes.padStart(2, '0')}`;
+        }
+
+        function displayGuest(guest) {
+            const guestBox = document.createElement('div');
+            guestBox.className = 'guest-box';
+            
+            const name = document.createElement('h2');
+            name.textContent = `${guest['First name']} ${guest['Last name']}`;
+            guestBox.appendChild(name);
+
+            const infoGroups = [
+                {
+                    title: 'Arrival Information',
+                    fields: ['Arrival Date', 'Arrival Time', 'Arrival Flight']
+                },
+                {
+                    title: 'Departure Information',
+                    fields: ['Check Out', 'Dep Flight', 'Dep Time']
+                },
+                {
+                    title: 'Personal Information',
+                    fields: ['Passport No.', 'Tel', 'N Or V']
+                }
+            ];
+
+            infoGroups.forEach(group => {
+                const groupDiv = document.createElement('div');
+                groupDiv.className = 'info-group';
+                const groupTitle = document.createElement('p');
+                groupTitle.className = 'key-info';
+                groupTitle.textContent = group.title;
+                groupDiv.appendChild(groupTitle);
+
+                group.fields.forEach(field => {
+                    if (guest[field]) {
+                        const detail = document.createElement('p');
+                        let formattedValue = guest[field];
+                        if (field.includes('Date')) {
+                            formattedValue = formatDate(guest[field]);
+                        } else if (field.includes('Time')) {
+                            formattedValue = formatTime(guest[field]);
+                        }
+                        detail.innerHTML = `<span class="secondary-info">${field}:</span> ${formattedValue}`;
+                        groupDiv.appendChild(detail);
+                    }
+                });
+
+                guestBox.appendChild(groupDiv);
+            });
+
+            if (guest['Comments']) {
+                const comments = document.createElement('p');
+                comments.innerHTML = `<span class="highlight-info">Comments:</span> ${guest['Comments']}`;
+                guestBox.appendChild(comments);
+            }
+
+            return guestBox;
+        }
+
+        function searchGuests(searchTerm) {
+            const guestResults = document.getElementById('guestResults');
+            guestResults.innerHTML = '';
+
+            const filteredGuests = guests.filter(guest => 
+                (guest['First name'] && guest['First name'].toLowerCase().includes(searchTerm.toLowerCase())) ||
+                (guest['Last name'] && guest['Last name'].toLowerCase().includes(searchTerm.toLowerCase()))
+            );
+
+            filteredGuests.forEach(guest => {
+                const guestBox = displayGuest(guest);
+                guestResults.appendChild(guestBox);
+            });
+        }
+
+        // Event Listeners
+        document.getElementById('searchInput').addEventListener('input', (e) => {
+            searchGuests(e.target.value);
+        });
+
+        // Fetch and process Excel file on page load
+        fetchAndProcessExcel();
+    </script>
+</body>
+</html>
